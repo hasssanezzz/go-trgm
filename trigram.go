@@ -1,99 +1,87 @@
-package main
+package trgm
 
 import (
-	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"strings"
+	"io"
+	"log"
+	"os"
+	"path/filepath"
 )
 
-const Threshold = 100
+const TriMaxCount = 68 * 68 * 68
+
+var Threshold uint32 = 5
 
 type Indexer interface {
 	Index(string, IndexEntry) error
 	Fetch(string) ([]IndexEntry, error)
 	Display()
-}
-
-type IndexEntry struct {
-	BatchId uint16
-	Offset  uint32
-}
-
-type Index map[uint32]map[IndexEntry]struct{}
-
-func (idx Index) serialize() []byte {
-	// block size [uint32]
-	// trigram [uint32]
-	// number of entries [uint32]
-	// list of entries[uint16 uint32][uint16 uint32][uint16 uint32]...
-	result := bytes.NewBuffer(nil)
-
-	for tri, entryMap := range idx {
-		blockSize := 4*3 + 6*len(entryMap)
-		result.Write(binary.LittleEndian.AppendUint32(nil, uint32(blockSize)))
-		result.Write(binary.LittleEndian.AppendUint32(nil, tri))
-		result.Write(binary.LittleEndian.AppendUint32(nil, uint32(len(entryMap))))
-
-		for entry, _ := range idx[tri] {
-			result.Write(binary.LittleEndian.AppendUint16(nil, entry.BatchId))
-			result.Write(binary.LittleEndian.AppendUint32(nil, entry.Offset))
-		}
-	}
-
-	return result.Bytes()
-}
-
-func trigramToInt(trigram string) uint32 {
-	c0 := uint32(trigram[0] - 32)
-	c1 := uint32(trigram[1] - 32)
-	c2 := uint32(trigram[2] - 32)
-	return c0*8836 + c1*94 + c2 // 8836 = 94*94
-}
-
-func intToTrigram(id uint32) string {
-	c0 := id / 8836
-	remainder := id % 8836
-	c1 := remainder / 94
-	c2 := remainder % 94
-	return string([]byte{
-		byte(c0 + 32),
-		byte(c1 + 32),
-		byte(c2 + 32),
-	})
-}
-
-func extractTrigrams(s string) []uint32 {
-	s = strings.ToLower(s)
-	results := make([]uint32, len(s)-2)
-	for i := range len(s) - 2 {
-		tri := s[i : i+3]
-		results[i] = trigramToInt(tri)
-	}
-	return results
+	Close() error
 }
 
 type TrigramIndexer struct {
-	index Index
+	index   *Index
+	file    *os.File
+	blocks  map[uint32][]int64
+	dirPath string
 }
 
-func NewTrigramIndexer() Indexer {
+func NewTrigramIndexer(dirPath string) (Indexer, error) {
 	ti := &TrigramIndexer{
-		index: map[uint32]map[IndexEntry]struct{}{},
+		index:   newIndex(),
+		blocks:  map[uint32][]int64{},
+		dirPath: dirPath,
 	}
 
-	return ti
+	file, err := os.OpenFile(filepath.Join(dirPath, "trgm.idx"), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return nil, err
+	}
+	ti.file = file
+
+	return ti, nil
 }
 
 func (i *TrigramIndexer) Index(s string, entry IndexEntry) error {
 	trigrams := extractTrigrams(s)
+
+	// Index
 	for _, tri := range trigrams {
-		i.index[tri][entry] = struct{}{}
+		i.index.put(tri, entry)
 	}
 
-	if len(i.index) > Threshold {
+	// Is threshold exceeded?
+	for _, tri := range trigrams {
+		// TODO: handle partial failures
+		if i.index.count(tri) >= Threshold {
+			log.Printf("Tri: %q exceeded it threshold %d", intToTri(tri), i.index.count(tri))
 
+			// Seek to the end of the file before writing
+			if _, err := i.file.Seek(0, io.SeekEnd); err != nil {
+				return err
+			}
+
+			// Get the block location
+			offset, err := i.file.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return err
+			}
+
+			// Write the block
+			blockBytes := i.index.serialize(tri)
+			if _, err := i.file.Write(blockBytes); err != nil {
+				return err
+			}
+
+			// Register the block location
+			i.blocks[tri] = append(i.blocks[tri], offset)
+
+			// Clear past entries
+			i.index.mapper[tri] = make(map[IndexEntry]struct{})
+			i.index.counter[tri] = 0
+		}
 	}
 
 	return nil
@@ -104,8 +92,23 @@ func (i *TrigramIndexer) Fetch(pattern string) ([]IndexEntry, error) {
 
 	results := map[IndexEntry]struct{}{}
 	for _, tri := range trigrams {
-		if mp, found := i.index[tri]; found {
+		// Search in the in-memory index
+		if mp, found := i.index.mapper[tri]; found {
 			for entry, _ := range mp {
+				results[entry] = struct{}{}
+			}
+		}
+
+		// Search in blocks
+		if offsets, found := i.blocks[tri]; found {
+			entries, err := i.searchInBlock(tri, offsets)
+			if err != nil {
+				log.Printf("failed to search in block[%q]: %v", intToTri(tri), err)
+				continue
+			}
+
+			// TODO: pass a pointer to the result map insteaf of allocating memory
+			for _, entry := range entries {
 				results[entry] = struct{}{}
 			}
 		}
@@ -120,10 +123,53 @@ func (i *TrigramIndexer) Fetch(pattern string) ([]IndexEntry, error) {
 }
 
 func (i *TrigramIndexer) Display() {
-	d, err := json.MarshalIndent(i.index, "", "    ")
+	d, err := json.MarshalIndent(i.blocks, "", "    ")
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println(string(d))
+	os.WriteFile("display.temp.txt", d, 0644)
+}
+
+func (i *TrigramIndexer) Close() error {
+	return i.file.Close()
+}
+
+func (i *TrigramIndexer) searchInBlock(tri uint32, offsets []int64) ([]IndexEntry, error) {
+	// TODO: isn't block's size fixed?
+
+	results := map[IndexEntry]struct{}{}
+
+	for _, offset := range offsets {
+		if _, err := i.file.Seek(offset, io.SeekStart); err != nil {
+			return nil, err
+		}
+
+		blockSizeBuff := make([]byte, 4)
+		if _, err := i.file.Read(blockSizeBuff); err != nil {
+			return nil, err
+		}
+
+		blockSize := binary.LittleEndian.Uint32(blockSizeBuff)
+		block := make([]byte, blockSize)
+		if _, err := i.file.Read(block); err != nil {
+			return nil, err
+		}
+
+		entries, err := i.index.decodeBlock(tri, block)
+		if err != nil {
+			return nil, fmt.Errorf("searchInBlock failed to decode block: %v", err)
+		}
+
+		for _, entry := range entries {
+			results[entry] = struct{}{}
+		}
+	}
+
+	entries := make([]IndexEntry, 0, len(results))
+	for entry, _ := range results {
+		entries = append(entries, entry)
+	}
+
+	return entries, nil
 }
