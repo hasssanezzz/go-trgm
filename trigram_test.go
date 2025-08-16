@@ -9,11 +9,16 @@ func init() {
 }
 
 func TestFetchFromMemoryAndDisk(t *testing.T) {
-	indexer, err := NewTrigramIndexer(t.TempDir())
+	// indexer, err := NewTrigramIndexer(t.TempDir())
+	indexer, err := NewTrigramIndexer("./temp")
 	if err != nil {
 		t.Fatalf("Failed to create TrigramIndexer: %v", err)
 	}
-	defer indexer.Close() // Ensure file is closed
+	defer func() {
+		if err := indexer.Close(); err != nil {
+			t.Fatalf("Failed to close the indexer: %v", err)
+		}
+	}()
 
 	testTrigramStr := "man" // This trigram should appear in the messages below
 

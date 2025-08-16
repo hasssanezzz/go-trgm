@@ -24,20 +24,25 @@ type Indexer interface {
 type TrigramIndexer struct {
 	index   *Index
 	file    *os.File
-	blocks  map[uint32][]int64
+	bindex  *blockIndex
 	dirPath string
 }
 
 func NewTrigramIndexer(dirPath string) (Indexer, error) {
 	ti := &TrigramIndexer{
 		index:   newIndex(),
-		blocks:  map[uint32][]int64{},
 		dirPath: dirPath,
 	}
 
-	file, err := os.OpenFile(filepath.Join(dirPath, "trgm.idx"), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	meta, err := newBlockIndex(dirPath)
 	if err != nil {
 		return nil, err
+	}
+	ti.bindex = meta
+
+	file, err := os.OpenFile(filepath.Join(dirPath, "trgm.idx"), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open index file: %v", err)
 	}
 	ti.file = file
 
@@ -76,7 +81,9 @@ func (i *TrigramIndexer) Index(s string, entry IndexEntry) error {
 			}
 
 			// Register the block location
-			i.blocks[tri] = append(i.blocks[tri], offset)
+			if err := i.bindex.putBlock(tri, uint32(offset)); err != nil {
+				return fmt.Errorf("failed to index the newly created block: %v", err)
+			}
 
 			// Clear past entries
 			i.index.mapper[tri] = make(map[IndexEntry]struct{})
@@ -100,7 +107,7 @@ func (i *TrigramIndexer) Fetch(pattern string) ([]IndexEntry, error) {
 		}
 
 		// Search in blocks
-		if offsets, found := i.blocks[tri]; found {
+		if offsets, found := i.bindex.blocks[tri]; found {
 			entries, err := i.searchInBlock(tri, offsets)
 			if err != nil {
 				log.Printf("failed to search in block[%q]: %v", intToTri(tri), err)
@@ -123,7 +130,7 @@ func (i *TrigramIndexer) Fetch(pattern string) ([]IndexEntry, error) {
 }
 
 func (i *TrigramIndexer) Display() {
-	d, err := json.MarshalIndent(i.blocks, "", "    ")
+	d, err := json.MarshalIndent(i.bindex.blocks, "", "    ")
 	if err != nil {
 		panic(err)
 	}
@@ -132,16 +139,19 @@ func (i *TrigramIndexer) Display() {
 }
 
 func (i *TrigramIndexer) Close() error {
+	if err := i.bindex.close(); err != nil {
+		return err
+	}
 	return i.file.Close()
 }
 
-func (i *TrigramIndexer) searchInBlock(tri uint32, offsets []int64) ([]IndexEntry, error) {
+func (i *TrigramIndexer) searchInBlock(tri uint32, offsets []uint32) ([]IndexEntry, error) {
 	// TODO: isn't block's size fixed?
 
 	results := map[IndexEntry]struct{}{}
 
 	for _, offset := range offsets {
-		if _, err := i.file.Seek(offset, io.SeekStart); err != nil {
+		if _, err := i.file.Seek(int64(offset), io.SeekStart); err != nil {
 			return nil, err
 		}
 

@@ -6,11 +6,6 @@ import (
 	"fmt"
 )
 
-type IndexEntry struct {
-	batchId uint16
-	offset  uint32
-}
-
 type Index struct {
 	counter [TriMaxCount]uint32
 	mapper  map[uint32]map[IndexEntry]struct{}
@@ -73,8 +68,7 @@ func (idx *Index) serialize(tri uint32) []byte {
 
 	// Index entries [uint16][uint32], [uint16][uint32], ...
 	for entry, _ := range idx.mapper[tri] {
-		result.Write(binary.LittleEndian.AppendUint16(nil, entry.batchId))
-		result.Write(binary.LittleEndian.AppendUint32(nil, entry.offset))
+		result.Write(entry.Encode())
 	}
 
 	return result.Bytes()
@@ -89,6 +83,8 @@ func (idx *Index) decodeBlock(tri uint32, data []byte) ([]IndexEntry, error) {
 	if count == 0 {
 		return nil, fmt.Errorf("data coruption, block entry count = 0")
 	}
+
+	// TODO skip deleted entries
 
 	data = data[8:]
 	entries := make([]IndexEntry, count)
