@@ -3,7 +3,7 @@ package trgm
 type block struct {
 	offset  uint32
 	tri     uint32
-	entries set[IndexEntry]
+	entries set
 }
 
 func (b *block) encode() []byte {

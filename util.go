@@ -22,12 +22,15 @@ func init() {
 	}
 }
 
-func isValidString(input string) error {
-	for _, c := range input {
-		if _, ok := AlphaMap[c]; !ok {
-			return ErrInvalidInput
-		}
-	}
+func isValidString(_input string) error {
+	// NOTE: commented out for now
+	// should iterate through the ascii table instead of using strings.ToLower
+
+	// for _, c := range input {
+	// 	if _, ok := AlphaMap[c]; !ok {
+	// 		return ErrInvalidInput
+	// 	}
+	// }
 	return nil
 }
 

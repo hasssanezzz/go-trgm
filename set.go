@@ -1,26 +1,48 @@
 package trgm
 
-type set[T comparable] struct {
-	values map[T]struct{}
+type set struct {
+	values map[IndexEntry]struct{}
 }
 
-func (s *set[T]) add(v T) {
+func newSet() set {
+	return set{
+		values: map[IndexEntry]struct{}{},
+	}
+}
+
+func (s set) add(v IndexEntry) {
 	s.values[v] = struct{}{}
 }
 
-func (s *set[T]) contains(v T) bool {
+func (s set) contains(v IndexEntry) bool {
 	_, ok := s.values[v]
 	return ok
 }
 
-func (s *set[T]) remove(v T) {
+func (s set) remove(v IndexEntry) {
 	delete(s.values, v)
 }
 
-func (s *set[T]) toSlice() []T {
-	result := make([]T, 0, len(s.values))
+func (s set) union(a set) {
+	for value := range a.values {
+		s.values[value] = struct{}{}
+	}
+}
+
+func (s set) unionSlice(slice []IndexEntry) {
+	for _, value := range slice {
+		s.values[value] = struct{}{}
+	}
+}
+
+func (s set) toSlice() []IndexEntry {
+	result := make([]IndexEntry, 0, len(s.values))
 	for value, _ := range s.values {
 		result = append(result, value)
 	}
 	return result
+}
+
+func (s set) size() int {
+	return len(s.values)
 }

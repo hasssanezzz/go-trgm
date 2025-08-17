@@ -60,6 +60,52 @@ func (i *TrigramIndexer) Index(s string, entry IndexEntry) error {
 		i.index.put(tri, entry)
 	}
 
+	return i.thresholdCheck(trigrams)
+}
+
+func (i *TrigramIndexer) Fetch(pattern string) ([]IndexEntry, error) {
+	trigrams, err := validateInputAndExtractTrigrams(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	results := newSet()
+
+	for _, tri := range trigrams {
+		// Search in the in-memory index
+		if count, set := i.index.get(tri); count > 0 {
+			results.union(set)
+		}
+
+		// Search in blocks
+		if offsets, found := i.bindex.index[tri]; found {
+			if err := i.searchInBlock(tri, offsets, &results); err != nil {
+				log.Printf("failed to search in block[%q]: %v", intToTri(tri), err)
+				continue
+			}
+		}
+	}
+
+	return results.toSlice(), nil
+}
+
+func (i *TrigramIndexer) Display() {
+	d, err := json.MarshalIndent(i.bindex.index, "", "    ")
+	if err != nil {
+		panic(err)
+	}
+
+	os.WriteFile("display.temp.txt", d, 0644)
+}
+
+func (i *TrigramIndexer) Close() error {
+	if err := i.bindex.close(); err != nil {
+		return err
+	}
+	return i.file.Close()
+}
+
+func (i *TrigramIndexer) thresholdCheck(trigrams []uint32) error {
 	// Is threshold exceeded?
 	for _, tri := range trigrams {
 		// TODO: handle partial failures
@@ -89,7 +135,7 @@ func (i *TrigramIndexer) Index(s string, entry IndexEntry) error {
 			}
 
 			// Clear past entries
-			i.index.mapper[tri] = make(map[IndexEntry]struct{})
+			i.index.mapper[tri] = newSet()
 			i.index.counter[tri] = 0
 		}
 	}
@@ -97,95 +143,32 @@ func (i *TrigramIndexer) Index(s string, entry IndexEntry) error {
 	return nil
 }
 
-func (i *TrigramIndexer) Fetch(pattern string) ([]IndexEntry, error) {
-	trigrams, err := validateInputAndExtractTrigrams(pattern)
-	if err != nil {
-		return nil, err
-	}
-
-	results := map[IndexEntry]struct{}{}
-	for _, tri := range trigrams {
-		// Search in the in-memory index
-		if mp, found := i.index.mapper[tri]; found {
-			for entry, _ := range mp {
-				results[entry] = struct{}{}
-			}
-		}
-
-		// Search in blocks
-		if offsets, found := i.bindex.index[tri]; found {
-			entries, err := i.searchInBlock(tri, offsets)
-			if err != nil {
-				log.Printf("failed to search in block[%q]: %v", intToTri(tri), err)
-				continue
-			}
-
-			// TODO: pass a pointer to the result map insteaf of allocating memory
-			for _, entry := range entries {
-				results[entry] = struct{}{}
-			}
-		}
-	}
-
-	entries := make([]IndexEntry, 0, len(results))
-	for entry, _ := range results {
-		entries = append(entries, entry)
-	}
-
-	return entries, nil
-}
-
-func (i *TrigramIndexer) Display() {
-	d, err := json.MarshalIndent(i.bindex.index, "", "    ")
-	if err != nil {
-		panic(err)
-	}
-
-	os.WriteFile("display.temp.txt", d, 0644)
-}
-
-func (i *TrigramIndexer) Close() error {
-	if err := i.bindex.close(); err != nil {
-		return err
-	}
-	return i.file.Close()
-}
-
-func (i *TrigramIndexer) searchInBlock(tri uint32, offsets []uint32) ([]IndexEntry, error) {
+func (i *TrigramIndexer) searchInBlock(tri uint32, offsets []uint32, set *set) error {
 	// TODO: isn't block's size fixed?
-
-	results := map[IndexEntry]struct{}{}
 
 	for _, offset := range offsets {
 		if _, err := i.file.Seek(int64(offset), io.SeekStart); err != nil {
-			return nil, err
+			return err
 		}
 
 		blockSizeBuff := make([]byte, 4)
 		if _, err := i.file.Read(blockSizeBuff); err != nil {
-			return nil, err
+			return err
 		}
 
 		blockSize := binary.LittleEndian.Uint32(blockSizeBuff)
 		block := make([]byte, blockSize)
 		if _, err := i.file.Read(block); err != nil {
-			return nil, err
+			return err
 		}
 
 		entries, err := i.index.decodeBlock(tri, block)
 		if err != nil {
-			return nil, fmt.Errorf("searchInBlock failed to decode block: %v", err)
+			return fmt.Errorf("searchInBlock failed to decode block: %v", err)
 		}
 
-		for _, entry := range entries {
-			results[entry] = struct{}{}
-		}
+		set.unionSlice(entries)
 	}
 
-	entries := make([]IndexEntry, 0, len(results))
-	for entry, _ := range results {
-		entries = append(entries, entry)
-	}
-
-	return entries, nil
+	return nil
 }

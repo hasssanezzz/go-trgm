@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 )
 
+// blockIndex is an inverted index that stores the positions of every trigram's block
+// for example: "has" -> [500, 1000, 5000] where these numbers are block positions
 type blockIndex struct {
 	index    map[uint32][]uint32
 	wal      *_WAL
