@@ -9,14 +9,14 @@ import (
 )
 
 type blockIndex struct {
-	blocks   map[uint32][]uint32
+	index    map[uint32][]uint32
 	wal      *_WAL
 	filename string
 }
 
 func newBlockIndex(dirPath string) (*blockIndex, error) {
 	m := &blockIndex{
-		blocks:   map[uint32][]uint32{},
+		index:    map[uint32][]uint32{},
 		filename: filepath.Join(dirPath, "block_index.bin"),
 	}
 
@@ -31,7 +31,7 @@ func newBlockIndex(dirPath string) (*blockIndex, error) {
 		return nil, fmt.Errorf("failed to read WAL: %v", err)
 	}
 	if len(blocks) > 0 {
-		m.blocks = blocks
+		m.index = blocks
 	}
 
 	if _, err := os.Stat(m.filename); err != nil {
@@ -84,7 +84,7 @@ func (b *blockIndex) parse() error {
 			offsets[j] = o
 		}
 
-		b.blocks[tri] = offsets
+		b.index[tri] = offsets
 	}
 
 	return nil
@@ -94,9 +94,9 @@ func (b *blockIndex) serialize() error {
 	buffer := bytes.NewBuffer(nil)
 
 	// Write number of trigrams
-	buffer.Write(binary.LittleEndian.AppendUint32(nil, uint32(len(b.blocks))))
+	buffer.Write(binary.LittleEndian.AppendUint32(nil, uint32(len(b.index))))
 
-	for tri, offsets := range b.blocks {
+	for tri, offsets := range b.index {
 		buffer.Write(binary.LittleEndian.AppendUint32(nil, tri))
 		buffer.Write(binary.LittleEndian.AppendUint32(nil, uint32(len(offsets))))
 		for _, offset := range offsets {
@@ -117,7 +117,7 @@ func (b *blockIndex) serialize() error {
 }
 
 func (b *blockIndex) putBlock(tri, offset uint32) error {
-	b.blocks[tri] = append(b.blocks[tri], offset)
+	b.index[tri] = append(b.index[tri], offset)
 	return b.wal.append(tri, offset)
 }
 

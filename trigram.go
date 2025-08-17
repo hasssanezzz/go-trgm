@@ -50,7 +50,10 @@ func NewTrigramIndexer(dirPath string) (Indexer, error) {
 }
 
 func (i *TrigramIndexer) Index(s string, entry IndexEntry) error {
-	trigrams := extractTrigrams(s)
+	trigrams, err := validateInputAndExtractTrigrams(s)
+	if err != nil {
+		return err
+	}
 
 	// Index
 	for _, tri := range trigrams {
@@ -95,7 +98,10 @@ func (i *TrigramIndexer) Index(s string, entry IndexEntry) error {
 }
 
 func (i *TrigramIndexer) Fetch(pattern string) ([]IndexEntry, error) {
-	trigrams := extractTrigrams(pattern)
+	trigrams, err := validateInputAndExtractTrigrams(pattern)
+	if err != nil {
+		return nil, err
+	}
 
 	results := map[IndexEntry]struct{}{}
 	for _, tri := range trigrams {
@@ -107,7 +113,7 @@ func (i *TrigramIndexer) Fetch(pattern string) ([]IndexEntry, error) {
 		}
 
 		// Search in blocks
-		if offsets, found := i.bindex.blocks[tri]; found {
+		if offsets, found := i.bindex.index[tri]; found {
 			entries, err := i.searchInBlock(tri, offsets)
 			if err != nil {
 				log.Printf("failed to search in block[%q]: %v", intToTri(tri), err)
@@ -130,7 +136,7 @@ func (i *TrigramIndexer) Fetch(pattern string) ([]IndexEntry, error) {
 }
 
 func (i *TrigramIndexer) Display() {
-	d, err := json.MarshalIndent(i.bindex.blocks, "", "    ")
+	d, err := json.MarshalIndent(i.bindex.index, "", "    ")
 	if err != nil {
 		panic(err)
 	}

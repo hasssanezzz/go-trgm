@@ -1,6 +1,7 @@
 package trgm
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -8,6 +9,8 @@ import (
 const Alphabet = "abcdefghijklmnopqrstuvwxyz0123456789 !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
 
 var CharToCode [128]int
+var ErrInvalidInput error = errors.New("invalid input")
+var AlphaMap = map[rune]struct{}{}
 
 func init() {
 	for i := range CharToCode {
@@ -15,7 +18,17 @@ func init() {
 	}
 	for i, ch := range Alphabet {
 		CharToCode[int(ch)] = i
+		AlphaMap[ch] = struct{}{}
 	}
+}
+
+func isValidString(input string) error {
+	for _, c := range input {
+		if _, ok := AlphaMap[c]; !ok {
+			return ErrInvalidInput
+		}
+	}
+	return nil
 }
 
 func triToInt(trigram string) uint32 {
@@ -53,4 +66,12 @@ func extractTrigrams(s string) []uint32 {
 		results[i] = triToInt(tri)
 	}
 	return results
+}
+
+func validateInputAndExtractTrigrams(s string) ([]uint32, error) {
+	if err := isValidString(s); err != nil {
+		return nil, err
+	}
+
+	return extractTrigrams(s), nil
 }
