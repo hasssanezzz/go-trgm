@@ -7,6 +7,7 @@ import (
 )
 
 const Alphabet = "abcdefghijklmnopqrstuvwxyz0123456789 !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+const TriMaxCount = 69 * 69 * 69
 
 var CharToCode [128]int
 var ErrInvalidInput error = errors.New("invalid input")
@@ -22,7 +23,7 @@ func init() {
 	}
 }
 
-func isValidString(_input string) error {
+func isValidString(_ string) error {
 	// NOTE: commented out for now
 	// should iterate through the ascii table instead of using strings.ToLower
 
@@ -43,16 +44,16 @@ func triToInt(trigram string) uint32 {
 		panic("triToInt: bad pattern received: " + trigram)
 	}
 
-	return uint32(c0*68*68 + c1*68 + c2) // 8836 = 94*94
+	return uint32(c0*69*69 + c1*69 + c2)
 }
 
 func intToTri(id uint32) string {
 	if id >= TriMaxCount {
 		panic(fmt.Sprintf("triToInt: bad id received: %d", id))
 	}
-	c0 := id / (68 * 68)
-	c1 := (id / 68) % 68
-	c2 := id % 68
+	c0 := id / (69 * 69)
+	c1 := (id / 69) % 69
+	c2 := id % 69
 
 	return string([]byte{
 		Alphabet[c0],

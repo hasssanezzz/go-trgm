@@ -4,10 +4,16 @@ type set struct {
 	values map[IndexEntry]struct{}
 }
 
-func newSet() set {
-	return set{
+func newSet(values ...IndexEntry) set {
+	s := set{
 		values: map[IndexEntry]struct{}{},
 	}
+
+	if len(values) > 0 {
+		s.unionSlice(values)
+	}
+
+	return s
 }
 
 func (s set) add(v IndexEntry) {

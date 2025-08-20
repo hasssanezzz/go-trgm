@@ -18,6 +18,8 @@ func newIndex() *Index {
 	}
 }
 
+// FIXME: This function is a major indexing performance bottleneck.
+// Gotta use a tree or something and eliminate the usage of maps eveywhere.
 func (idx *Index) put(tri uint32, entry IndexEntry) {
 	if idx.counter[tri] == 0 {
 		idx.mapper[tri] = newSet()
@@ -48,6 +50,11 @@ func (idx *Index) get(tri uint32) (uint32, set) {
 	}
 
 	return count, set
+}
+
+func (idx *Index) clear(tri uint32) {
+	idx.counter[tri] = 0
+	idx.mapper[tri] = newSet()
 }
 
 func (idx *Index) serialize(tri uint32) []byte {
