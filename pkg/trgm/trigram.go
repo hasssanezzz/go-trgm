@@ -5,7 +5,7 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/hasssanezzz/trigram-index/pkg/common"
+	"github.com/hasssanezzz/go-trgm/pkg/common"
 )
 
 var Threshold uint32 = 5 * 1000

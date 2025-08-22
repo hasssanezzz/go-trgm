@@ -1,7 +1,7 @@
 package trgm
 
 import (
-	"github.com/hasssanezzz/trigram-index/pkg/common"
+	"github.com/hasssanezzz/go-trgm/pkg/common"
 )
 
 type Index struct {

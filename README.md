@@ -23,10 +23,18 @@ Trigram Index is an experimental Go-based indexing engine designed for **fast su
 * ❌ No CLI / API layer yet
 * ❌ No real-world performance benchmarks
 
+## TODOS
+
+- [ ] Add support for concurrency
+- [ ] Implement durability and crash recovery for the in memory index
+- [ ] Add tests for the block index codec
+- [ ] Change to IndexEntry to a generic fixed size DocId string
+- [ ] Remove the printable characters constraint to make it more generic
+
 ## Getting Started
 
 ```bash
-go get github.com/hasssanezzz/trigram-index
+go get github.com/hasssanezzz/go-trgm
 ```
 
 Example usage will be added soon as the project evolves.

@@ -1,4 +1,4 @@
-module github.com/hasssanezzz/trigram-index
+module github.com/hasssanezzz/go-trgm
 
 go 1.24.4
 

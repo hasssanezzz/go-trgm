@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/hasssanezzz/trigram-index/pkg/common"
+	"github.com/hasssanezzz/go-trgm/pkg/common"
 )
 
 type storageManager struct {

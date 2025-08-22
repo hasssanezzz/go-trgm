@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/hasssanezzz/trigram-index/pkg/bitset"
+	"github.com/hasssanezzz/go-trgm/pkg/bitset"
 	z "github.com/klauspost/compress/zstd"
 )
 
