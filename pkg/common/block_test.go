@@ -20,7 +20,7 @@ func compareEntries(a, b []IndexEntry) bool {
 }
 
 func TestNewBlock(t *testing.T) {
-	n := 10
+	n := 1000
 	tri := uint32(69)
 	entries := make([]IndexEntry, n)
 	for i := range n {

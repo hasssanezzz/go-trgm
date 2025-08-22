@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/hasssanezzz/trigram-index/pkg/bitset"
+	z "github.com/klauspost/compress/zstd"
 )
 
 type Block struct {
@@ -33,10 +34,17 @@ func (b *Block) Deserialize(r io.Reader) error {
 		return err
 	}
 
+	reader, err := z.NewReader(nil)
+	if err != nil {
+		return err
+	}
+	if data, err = reader.DecodeAll(data, nil); err != nil {
+		return err
+	}
+
 	r = bytes.NewReader(data) // to minimize IO?
 
-	var tri uint32
-	if err := binary.Read(r, binary.LittleEndian, &tri); err != nil {
+	if err := binary.Read(r, binary.LittleEndian, &b.tri); err != nil {
 		return err
 	}
 
@@ -69,10 +77,6 @@ func (b *Block) Deserialize(r io.Reader) error {
 func (b *Block) Serialize() []byte {
 	result := bytes.NewBuffer(nil)
 
-	// Block size [uint32]
-	blockSize := 4*2 + 6*len(b.entries) + b.bitset.DataSize()
-	result.Write(binary.LittleEndian.AppendUint32(nil, uint32(blockSize)))
-
 	// Trigram as int [uint32]
 	result.Write(binary.LittleEndian.AppendUint32(nil, b.tri))
 
@@ -87,7 +91,13 @@ func (b *Block) Serialize() []byte {
 		result.Write(entry.Encode())
 	}
 
-	return result.Bytes()
+	writer, _ := z.NewWriter(nil) // ignoring error here
+	compressed := writer.EncodeAll(result.Bytes(), nil)
+
+	// Block size [uint32]
+	blockSize := len(compressed)
+
+	return append(binary.LittleEndian.AppendUint32(nil, uint32(blockSize)), compressed...)
 }
 
 func (b *Block) Entries() []IndexEntry {
