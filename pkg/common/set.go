@@ -1,47 +1,47 @@
-package trgm
+package common
 
-type set struct {
+type Set struct {
 	values map[IndexEntry]struct{}
 }
 
-func newSet(values ...IndexEntry) set {
-	s := set{
+func NewSet(values ...IndexEntry) Set {
+	s := Set{
 		values: map[IndexEntry]struct{}{},
 	}
 
 	if len(values) > 0 {
-		s.unionSlice(values)
+		s.UnionSlice(values)
 	}
 
 	return s
 }
 
-func (s set) add(v IndexEntry) {
+func (s Set) Add(v IndexEntry) {
 	s.values[v] = struct{}{}
 }
 
-func (s set) contains(v IndexEntry) bool {
+func (s Set) Contains(v IndexEntry) bool {
 	_, ok := s.values[v]
 	return ok
 }
 
-func (s set) remove(v IndexEntry) {
+func (s Set) Remove(v IndexEntry) {
 	delete(s.values, v)
 }
 
-func (s set) union(a set) {
+func (s Set) Union(a Set) {
 	for value := range a.values {
 		s.values[value] = struct{}{}
 	}
 }
 
-func (s set) unionSlice(slice []IndexEntry) {
+func (s Set) UnionSlice(slice []IndexEntry) {
 	for _, value := range slice {
 		s.values[value] = struct{}{}
 	}
 }
 
-func (s set) toSlice() []IndexEntry {
+func (s Set) ToSlice() []IndexEntry {
 	result := make([]IndexEntry, 0, len(s.values))
 	for value, _ := range s.values {
 		result = append(result, value)
@@ -49,6 +49,6 @@ func (s set) toSlice() []IndexEntry {
 	return result
 }
 
-func (s set) size() int {
+func (s Set) Size() int {
 	return len(s.values)
 }

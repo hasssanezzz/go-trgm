@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+
+	"github.com/hasssanezzz/trigram-index/pkg/common"
 )
 
 var Threshold uint32 = 5 * 1000
 
 type Indexer interface {
-	Index(string, IndexEntry) error
-	Fetch(string) ([]IndexEntry, error)
+	Index(string, common.IndexEntry) error
+	Fetch(string) ([]common.IndexEntry, error)
 	Display()
 	Close() error
 }
@@ -43,7 +45,7 @@ func NewTrigramIndexer(dirPath string) (Indexer, error) {
 	return ti, nil
 }
 
-func (i *TrigramIndexer) Index(s string, entry IndexEntry) error {
+func (i *TrigramIndexer) Index(s string, entry common.IndexEntry) error {
 	trigrams, err := validateInputAndExtractTrigrams(s)
 	if err != nil {
 		return err
@@ -57,18 +59,18 @@ func (i *TrigramIndexer) Index(s string, entry IndexEntry) error {
 	return i.thresholdCheck(trigrams)
 }
 
-func (i *TrigramIndexer) Fetch(pattern string) ([]IndexEntry, error) {
+func (i *TrigramIndexer) Fetch(pattern string) ([]common.IndexEntry, error) {
 	trigrams, err := validateInputAndExtractTrigrams(pattern)
 	if err != nil {
 		return nil, err
 	}
 
-	results := newSet()
+	results := common.NewSet()
 
 	for _, tri := range trigrams {
 		// Search in the in-memory index
 		if count, set := i.index.get(tri); count > 0 {
-			results.union(set)
+			results.Union(set)
 		}
 
 		// Search in blocks
@@ -80,7 +82,7 @@ func (i *TrigramIndexer) Fetch(pattern string) ([]IndexEntry, error) {
 		}
 	}
 
-	return results.toSlice(), nil
+	return results.ToSlice(), nil
 }
 
 func (i *TrigramIndexer) Display() {}
@@ -99,12 +101,12 @@ func (i *TrigramIndexer) thresholdCheck(trigrams []uint32) error {
 		if i.index.count(tri) >= Threshold {
 
 			// Serialize the block
-			blockBytes := i.index.serialize(tri)
+			block := common.NewBlock(tri, i.index.mapper[tri].ToSlice())
 
 			// log.Printf("Tri: %q exceeded it threshold %d, block size: %d", intToTri(tri), i.index.count(tri), len(blockBytes))
 
 			// Write the block
-			offset, err := i.storage.writeBlock(blockBytes)
+			offset, err := i.storage.writeBlock(block)
 			if err != nil {
 				return err
 			}
@@ -122,16 +124,14 @@ func (i *TrigramIndexer) thresholdCheck(trigrams []uint32) error {
 	return nil
 }
 
-func (i *TrigramIndexer) searchInBlock(offsets []uint32, set *set) error {
-	// TODO: isn't block's size fixed?
-
+func (i *TrigramIndexer) searchInBlock(offsets []uint32, set *common.Set) error {
 	for _, offset := range offsets {
-		entries, err := i.storage.readBlock(int64(offset))
+		entries, err := i.storage.readBlockAndDeserialize(int64(offset))
 		if err != nil {
 			return err
 		}
 
-		set.unionSlice(entries)
+		set.UnionSlice(entries)
 	}
 
 	return nil

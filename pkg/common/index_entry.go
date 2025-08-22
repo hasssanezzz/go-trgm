@@ -1,4 +1,4 @@
-package trgm
+package common
 
 import "encoding/binary"
 
