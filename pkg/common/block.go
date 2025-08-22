@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/hasssanezzz/go-trgm/pkg/bitset"
-	z "github.com/klauspost/compress/zstd"
 )
 
 type Block struct {
@@ -34,11 +33,8 @@ func (b *Block) Deserialize(r io.Reader) error {
 		return err
 	}
 
-	reader, err := z.NewReader(nil)
-	if err != nil {
-		return err
-	}
-	if data, err = reader.DecodeAll(data, nil); err != nil {
+	var err error
+	if data, err = decompress(data); err != nil {
 		return err
 	}
 
@@ -91,8 +87,7 @@ func (b *Block) Serialize() []byte {
 		result.Write(entry.Encode())
 	}
 
-	writer, _ := z.NewWriter(nil) // ignoring error here
-	compressed := writer.EncodeAll(result.Bytes(), nil)
+	compressed, _ := compress(result.Bytes())
 
 	// Block size [uint32]
 	blockSize := len(compressed)
