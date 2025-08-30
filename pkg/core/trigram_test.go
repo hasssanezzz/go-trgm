@@ -1,4 +1,4 @@
-package trgm
+package core
 
 import (
 	"os"
@@ -8,18 +8,43 @@ import (
 	"github.com/hasssanezzz/go-trgm/pkg/common"
 )
 
+var primes = []int{505447,
+	505447,
+	511111,
+	524287,
+	524287,
+	541027,
+	541027,
+	563417,
+	584141,
+	584141,
+	593933,
+	593933,
+	593993,
+	593993,
+	665557,
+	667333}
+
 func init() {
 	Threshold = 4
 }
 
 func readLines() []string {
-	path := "../../testing/lines.better.txt"
+	path := "../../testing/0.5mil.txt"
 	data, err := os.ReadFile(path)
 	if err != nil {
 		panic(err)
 	}
 
 	return strings.Split(string(data), "\n")
+}
+
+func makeDocumentId(n int) common.DocumentID {
+	d := common.DocumentID{}
+	for i := range common.DocumentIdSize {
+		d[i] = uint8((n + 1) * primes[i] % 256)
+	}
+	return d
 }
 
 func BenchmarkIndexer(b *testing.B) {
@@ -38,7 +63,7 @@ func BenchmarkIndexer(b *testing.B) {
 	b.Run("Indexing", func(b *testing.B) {
 		b.ResetTimer()
 		for i := range b.N {
-			if err := indexer.Index(lines[i%len(lines)], common.NewIndexEntry(uint16(i), uint32(i))); err != nil {
+			if err := indexer.Index(lines[i%len(lines)], makeDocumentId(i)); err != nil {
 				panic(err)
 			}
 		}
@@ -52,7 +77,6 @@ func BenchmarkIndexer(b *testing.B) {
 			}
 		}
 	})
-
 }
 
 func TestFetchFromMemoryAndDisk(t *testing.T) {
@@ -69,13 +93,13 @@ func TestFetchFromMemoryAndDisk(t *testing.T) {
 	testTrigramStr := "man" // This trigram should appear in the messages below
 
 	// Create distinct common.IndexEntry structs
-	entries := []common.IndexEntry{
-		common.NewIndexEntry(100, 1000),
-		common.NewIndexEntry(101, 1001),
-		common.NewIndexEntry(102, 1002),
-		common.NewIndexEntry(103, 1003), // 4th entry - should trigger disk write
-		common.NewIndexEntry(104, 1004), // Should stay in memory
-		common.NewIndexEntry(105, 1005), // Should stay in memory
+	entries := []common.DocumentID{
+		makeDocumentId(100),
+		makeDocumentId(101),
+		makeDocumentId(102),
+		makeDocumentId(103), // 4th entry - should trigger disk write
+		makeDocumentId(104), // Should stay in memory
+		makeDocumentId(105), // Should stay in memory
 	}
 
 	messages := []string{

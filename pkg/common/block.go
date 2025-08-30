@@ -11,10 +11,10 @@ import (
 type Block struct {
 	tri     uint32
 	bitset  *bitset.Bitset
-	entries []IndexEntry // doesn't need to be a set
+	entries []DocumentID // doesn't need to be a set
 }
 
-func NewBlock(tri uint32, entries []IndexEntry) *Block {
+func NewBlock(tri uint32, entries []DocumentID) *Block {
 	return &Block{
 		tri:     tri,
 		bitset:  bitset.New(len(entries)),
@@ -55,16 +55,13 @@ func (b *Block) Deserialize(r io.Reader) error {
 	}
 	b.bitset = bitset.FromBytes(int(count), bitsetBytes)
 
-	b.entries = make([]IndexEntry, 0, int(count))
+	b.entries = make([]DocumentID, 0, int(count))
 	for range int(count) {
-		entryBuff := make([]byte, 6)
-		if _, err := r.Read(entryBuff); err != nil {
+		entry := [16]byte{}
+		if _, err := r.Read(entry[:]); err != nil {
 			return err
 		}
-
-		b.entries = append(b.entries, NewIndexEntry(
-			binary.LittleEndian.Uint16(entryBuff[:2]),
-			binary.LittleEndian.Uint32(entryBuff[2:])))
+		b.entries = append(b.entries, entry)
 	}
 
 	return nil
@@ -84,7 +81,7 @@ func (b *Block) Serialize() []byte {
 
 	// Writing index entries 6 Byte/Entry
 	for _, entry := range b.entries {
-		result.Write(entry.Encode())
+		result.Write(entry[:])
 	}
 
 	compressed, _ := compress(result.Bytes())
@@ -95,9 +92,9 @@ func (b *Block) Serialize() []byte {
 	return append(binary.LittleEndian.AppendUint32(nil, uint32(blockSize)), compressed...)
 }
 
-func (b *Block) Entries() []IndexEntry {
+func (b *Block) Entries() []DocumentID {
 	deletedCount := len(b.entries) - b.bitset.CountOnes()
-	result := make([]IndexEntry, 0, len(b.entries)-deletedCount)
+	result := make([]DocumentID, 0, len(b.entries)-deletedCount)
 	for i, entry := range b.entries {
 		if b.bitset.Test(i) {
 			continue
@@ -111,9 +108,9 @@ func (b *Block) DeleteByIndex(index int) {
 	b.bitset.Set(index)
 }
 
-func (b *Block) Delete(target IndexEntry) bool {
+func (b *Block) Delete(target DocumentID) bool {
 	for i, entry := range b.entries {
-		if entry.batchId == target.batchId && entry.offset == target.offset {
+		if target.Compare(entry) {
 			b.bitset.Set(i)
 			return true
 		}

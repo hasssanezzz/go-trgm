@@ -2,16 +2,17 @@ package common
 
 import (
 	"bytes"
+	"math/rand"
 	"testing"
 )
 
-func compareEntries(a, b []IndexEntry) bool {
+func compareEntries(a, b []DocumentID) bool {
 	if len(a) != len(b) {
 		return false
 	}
 
 	for i := range len(a) {
-		if a[i].batchId != b[i].batchId || a[i].offset != b[i].offset {
+		if a[i].Compare(b[i]) {
 			return false
 		}
 	}
@@ -22,9 +23,9 @@ func compareEntries(a, b []IndexEntry) bool {
 func TestNewBlock(t *testing.T) {
 	n := 1000
 	tri := uint32(69)
-	entries := make([]IndexEntry, n)
+	entries := make([]DocumentID, n)
 	for i := range n {
-		entries[i] = NewIndexEntry(uint16(i), uint32(i*2))
+		entries[i] = [DocumentIdSize]byte{byte(i), byte(rand.Intn(256))}
 	}
 
 	block := NewBlock(tri, entries)

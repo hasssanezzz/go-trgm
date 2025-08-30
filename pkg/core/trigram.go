@@ -1,4 +1,4 @@
-package trgm
+package core
 
 import (
 	"fmt"
@@ -8,17 +8,17 @@ import (
 	"github.com/hasssanezzz/go-trgm/pkg/common"
 )
 
-var Threshold uint32 = 5 * 1000
+var Threshold = 5 * 1000
 
 type Indexer interface {
-	Index(string, common.IndexEntry) error
-	Fetch(string) ([]common.IndexEntry, error)
+	Index(string, common.DocumentID) error
+	Fetch(string) ([]common.DocumentID, error)
 	Display()
 	Close() error
 }
 
 type TrigramIndexer struct {
-	index   *Index
+	index   Mapper
 	storage *storageManager
 	bindex  *blockIndex
 	dirPath string
@@ -45,7 +45,7 @@ func NewTrigramIndexer(dirPath string) (Indexer, error) {
 	return ti, nil
 }
 
-func (i *TrigramIndexer) Index(s string, entry common.IndexEntry) error {
+func (i *TrigramIndexer) Index(s string, entry common.DocumentID) error {
 	trigrams, err := validateInputAndExtractTrigrams(s)
 	if err != nil {
 		return err
@@ -53,13 +53,13 @@ func (i *TrigramIndexer) Index(s string, entry common.IndexEntry) error {
 
 	// Index
 	for _, tri := range trigrams {
-		i.index.put(tri, entry)
+		i.index.Put(tri, entry)
 	}
 
 	return i.thresholdCheck(trigrams)
 }
 
-func (i *TrigramIndexer) Fetch(pattern string) ([]common.IndexEntry, error) {
+func (i *TrigramIndexer) Fetch(pattern string) ([]common.DocumentID, error) {
 	trigrams, err := validateInputAndExtractTrigrams(pattern)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (i *TrigramIndexer) Fetch(pattern string) ([]common.IndexEntry, error) {
 
 	for _, tri := range trigrams {
 		// Search in the in-memory index
-		if count, set := i.index.get(tri); count > 0 {
+		if count, set := i.index.Get(tri); count > 0 {
 			results.Union(set)
 		}
 
@@ -98,12 +98,13 @@ func (i *TrigramIndexer) thresholdCheck(trigrams []uint32) error {
 	// Is threshold exceeded?
 	for _, tri := range trigrams {
 		// TODO: handle partial failures
-		if i.index.count(tri) >= Threshold {
+		if i.index.Count(tri) >= Threshold {
 
 			// Serialize the block
-			block := common.NewBlock(tri, i.index.mapper[tri].ToSlice())
+			_, set := i.index.Get(tri)
+			block := common.NewBlock(tri, set.ToSlice())
 
-			// log.Printf("Tri: %q exceeded it threshold %d, block size: %d", intToTri(tri), i.index.count(tri), len(blockBytes))
+			log.Printf("Tri: %q exceeded it threshold %d", intToTri(tri), i.index.Count(tri))
 
 			// Write the block
 			offset, err := i.storage.writeBlock(block)
@@ -117,7 +118,7 @@ func (i *TrigramIndexer) thresholdCheck(trigrams []uint32) error {
 			}
 
 			// Clear past entries
-			i.index.clear(tri)
+			i.index.Clear(tri)
 		}
 	}
 

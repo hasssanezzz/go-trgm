@@ -1,4 +1,4 @@
-package trgm
+package core
 
 import (
 	"bytes"

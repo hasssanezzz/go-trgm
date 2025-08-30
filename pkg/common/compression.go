@@ -6,20 +6,24 @@ import (
 	z "github.com/klauspost/compress/zstd"
 )
 
-func compress(data []byte) ([]byte, error) {
-	writer, err := z.NewWriter(nil)
-	if err != nil {
-		return nil, err
-	}
+var (
+	compressor, errc   = z.NewWriter(nil, z.WithEncoderLevel(z.SpeedFastest))
+	decompressor, errd = z.NewReader(nil)
+)
 
-	return writer.EncodeAll(data, nil), nil
+func init() {
+	if errc != nil {
+		panic(errc)
+	}
+	if errd != nil {
+		panic(errd)
+	}
+}
+
+func compress(data []byte) ([]byte, error) {
+	return compressor.EncodeAll(data, nil), nil
 }
 
 func decompress(data []byte) ([]byte, error) {
-	reader, err := z.NewReader(nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return reader.DecodeAll(data, nil)
+	return decompressor.DecodeAll(data, nil)
 }

@@ -1,4 +1,4 @@
-package trgm
+package core
 
 import (
 	"encoding/binary"
@@ -48,7 +48,7 @@ func (s *storageManager) readBlock(offset int64) ([]byte, error) {
 	return append(blockSizeBuff, blockBytes...), nil
 }
 
-func (s *storageManager) readBlockAndDeserialize(offset int64) ([]common.IndexEntry, error) {
+func (s *storageManager) readBlockAndDeserialize(offset int64) ([]common.DocumentID, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
