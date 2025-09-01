@@ -1,18 +1,16 @@
 package common
 
-import "encoding/binary"
+import (
+	"bytes"
+	"encoding/binary"
+)
 
 const DocumentIdSize = 16
 
 type DocumentID [DocumentIdSize]byte
 
-func (d DocumentID) Compare(other DocumentID) bool {
-	for i := range DocumentIdSize {
-		if d[i] == other[i] {
-			return false
-		}
-	}
-	return true
+func (d DocumentID) Equal(other DocumentID) bool {
+	return bytes.Equal(d[:], other[:])
 }
 
 type IndexEntry struct {
