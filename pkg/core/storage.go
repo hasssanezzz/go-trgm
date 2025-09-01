@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -12,7 +13,7 @@ import (
 
 type storageManager struct {
 	file *os.File
-	mu   sync.Mutex
+	mu   sync.RWMutex
 }
 
 func newStorageManager(filepath string) (*storageManager, error) {
@@ -27,37 +28,48 @@ func newStorageManager(filepath string) (*storageManager, error) {
 }
 
 func (s *storageManager) readBlock(offset int64) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, err := s.file.Seek(int64(offset), io.SeekStart); err != nil {
-		return nil, err
-	}
-
+	// Read the block size and the block bytes under a read lock using ReadAt
+	// so we don't change file offset and allow concurrent readers.
 	blockSizeBuff := make([]byte, 4)
-	if _, err := s.file.Read(blockSizeBuff); err != nil {
+	s.mu.RLock()
+	if _, err := s.file.ReadAt(blockSizeBuff, offset); err != nil {
+		s.mu.RUnlock()
 		return nil, err
 	}
 
 	blockSize := binary.LittleEndian.Uint32(blockSizeBuff)
 	blockBytes := make([]byte, blockSize)
-	if _, err := s.file.Read(blockBytes); err != nil {
+	if _, err := s.file.ReadAt(blockBytes, offset+4); err != nil {
+		s.mu.RUnlock()
 		return nil, err
 	}
+	s.mu.RUnlock()
 
 	return append(blockSizeBuff, blockBytes...), nil
 }
 
 func (s *storageManager) readBlockAndDeserialize(offset int64) ([]common.DocumentID, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, err := s.file.Seek(int64(offset), io.SeekStart); err != nil {
+	// Read raw block bytes under a read lock, then deserialize off-lock.
+	// This avoids holding the lock during decompression/CPU work.
+	blockSizeBuff := make([]byte, 4)
+	s.mu.RLock()
+	if _, err := s.file.ReadAt(blockSizeBuff, offset); err != nil {
+		s.mu.RUnlock()
 		return nil, err
 	}
 
+	blockSize := binary.LittleEndian.Uint32(blockSizeBuff)
+	data := make([]byte, blockSize)
+	if _, err := s.file.ReadAt(data, offset+4); err != nil {
+		s.mu.RUnlock()
+		return nil, err
+	}
+	s.mu.RUnlock()
+
+	// Provide a reader that matches previous behavior (block size header + compressed data)
+	r := bytes.NewReader(append(blockSizeBuff, data...))
 	var block common.Block
-	if err := block.Deserialize(s.file); err != nil {
+	if err := block.Deserialize(r); err != nil {
 		return nil, err
 	}
 
@@ -65,6 +77,8 @@ func (s *storageManager) readBlockAndDeserialize(offset int64) ([]common.Documen
 }
 
 func (s *storageManager) writeBlock(block *common.Block) (int64, error) {
+	data := block.Serialize()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -75,8 +89,8 @@ func (s *storageManager) writeBlock(block *common.Block) (int64, error) {
 	}
 
 	// Write block data
-	if _, err := s.file.Write(block.Serialize()); err != nil {
-		return 0, nil
+	if _, err := s.file.Write(data); err != nil {
+		return 0, err
 	}
 
 	return offset, nil

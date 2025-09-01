@@ -11,8 +11,8 @@ func compareEntries(a, b []DocumentID) bool {
 		return false
 	}
 
-	for i := range len(a) {
-		if a[i].Compare(b[i]) {
+	for i := range a {
+		if !a[i].Equal(b[i]) {
 			return false
 		}
 	}

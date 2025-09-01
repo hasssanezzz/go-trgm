@@ -110,7 +110,7 @@ func (b *Block) DeleteByIndex(index int) {
 
 func (b *Block) Delete(target DocumentID) bool {
 	for i, entry := range b.entries {
-		if target.Compare(entry) {
+		if target.Equal(entry) {
 			b.bitset.Set(i)
 			return true
 		}
